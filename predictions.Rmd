@@ -1,0 +1,120 @@
+---
+title: "Predictive Machine Learning for Fitness Activity"
+author: "Schloby"
+date: "16 July 2016"
+output: html_document
+---
+
+#Summary
+
+This analysis attempts to predict how well a subject performed an action using the results from personal activity devices. We fit three classification models, a decision tree, a support vector machine, and a random forest. Although we originally planned to stack these models, the accuracy of the random forest was such that we selected it as our only model choice. The accuracy was 100% in sample and 99% out of sample. It correctly predicted 20/20 results in the validation sample. The disadvantages to the model are that it takes a long time to train and it more difficult to interpret.  
+
+#Introduction
+
+The motivation for this analysis comes from the following:
+
+*Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.*
+
+The data come from this source: [link](http://groupware.les.inf.puc-rio.br/har).
+
+#Data 
+
+The following R packages were used:
+
+```{r packages, message=F, warning=F}
+library(caret)
+library(rattle)
+```
+The data were downloaded to the working directory and read in as .csv files. 
+
+```{r data_in, cache=TRUE}
+raw_data<-read.csv("pml-training.csv", na.strings = c("NA",""), header=TRUE)
+validation<-read.csv("pml-testing.csv", na.strings = c("NA",""), header=TRUE)
+```
+
+#Cross validation
+To provide cross validation, the raw data was split into testing and training files. 
+```{r split, cache=TRUE}
+set.seed(1234)
+inTrain = createDataPartition(raw_data$classe, p = 3/4)[[1]]
+training = raw_data[ inTrain,]
+testing = raw_data[-inTrain,]
+```
+Because the data set contained many variables that wouldn't be predictive, such as summary statistics, those variables were removed from the trianing set. 
+```{r cleaning, cache=TRUE}
+#Don't keep the statistics on each set, as they won't be predictive for individual measurements
+stats<-c("kurtosis_", "skewness_", "max_", "min_", "amplitude_", "var_", "avg_", "stddev_" , "total_", "X" , "user_", "timestamp")
+matches <- unique (grep(paste(stats,collapse="|"), names(training)))
+train<-training[-matches]
+```
+Exploratory data analysis was also performed, including looking at the structure of the data and plotting variables compared to their predictors. 
+
+
+#Model build
+
+There are several methods which are good for predicting based on a classification, including decision trees, random forests, and support vectors, which were trained here.
+
+The original intention was to build several models and stack them, however, the result from the Random Forest model was so good, it was chosen as the final model on its own. 
+
+
+##Decision tree model
+
+A basic decision tree model was built using the default resampling method of bootstrapping with 25 repetitions. 
+
+```{r rpart_model, cache=TRUE}
+#Fit a basic decision tree model using default values (bootstrap = 25 reps)
+mod_rpart <- train(classe~., data=train, method="rpart")
+fancyRpartPlot(mod_rpart$finalModel)
+```
+
+Its accuracy in both the training and the testing samples was low, at around 49.5% for each, but at least we can be fairly confident that it isn't overfitting. 
+
+```{r rpart_results, cache=TRUE}
+pred_rpart_train<-predict(mod_rpart, train)
+confusionMatrix(pred_rpart_train, train$classe)$overall["Accuracy"]
+pred_rpart_test<-predict(mod_rpart, testing)
+confusionMatrix(pred_rpart_test, testing$classe)$overall["Accuracy"]
+```
+
+##SVM model
+
+A support vector machine with a linear kernal was also tested, with default resampling method of bootstrapping with 25 repetitions. 
+
+```{r svm_model, cache=TRUE, message=F, warning=F}
+#Fit SVM using default values (bootstrap = 25 reps)
+mod_svm<-train(classe~., data=train, method="svmLinear")
+```
+
+Its accuracy was higher than the decision tree, at 78% in sample, and 77% in sample. 
+
+```{r svm_results, cache=TRUE, message=F, warning=F}
+pred_svm_train<-predict(mod_svm, train)
+confusionMatrix(pred_svm_train, train$classe)$overall["Accuracy"]
+pred_svm_test<-predict(mod_svm, testing)
+confusionMatrix(pred_svm_test, testing$classe)$overall["Accuracy"]
+```
+
+##Random forest model
+However, by far the best model was the random forest. Although this takes an incredibly long time to train, the results were worth it. The accuracy could have been set lower if desired. As with the other models, this uses the default resampling method of bootstrapping with 25 repetitions.
+```{r rf_model, cache=TRUE, message=F, warning=F}
+mod_rf <-train(classe~., data=train, method="rf")
+```
+
+In sample, the accuracy was 100%, which led to concerns of overfitting. However, accuracy out of sample was 99%.
+
+```{r rf_results, cache=TRUE}
+pred_rf_train<-predict(mod_rf, train)
+confusionMatrix(pred_rf_train, train$classe)$overall["Accuracy"]
+pred_rf_test<-predict(mod_rf, testing)
+confusionMatrix(pred_rf_test, testing$classe)$overall["Accuracy"]
+```
+
+#Out of sample error 
+
+Had the accuracy of the random forest been lower, for example, closer to the SVM model, we would have stacked the models and looked at the combined output. However, as the accuracy of the random forest model was so good, we chose to use it on its own. The estimated out of sample error is 1%. 
+
+It performed very well on the validation sample, correctly predicting 20/20 cases. 
+
+
+
+
